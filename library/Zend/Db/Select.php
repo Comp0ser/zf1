@@ -84,6 +84,7 @@ class Zend_Db_Select
     const REGEX_COLUMN_EXPR       = '/^([\w]*\s*\(([^\(\)]|(?1))*\))$/';
     const REGEX_COLUMN_EXPR_ORDER = '/^([\w]+\s*\(([^\(\)]|(?1))*\))$/';
     const REGEX_COLUMN_EXPR_GROUP = '/^([\w]+\s*\(([^\(\)]|(?1))*\))$/';
+    const SQL_CALC_FOUND_ROWS = 'sqlCalcFoundRows';
     
     // @see http://stackoverflow.com/a/13823184/2028814
     const REGEX_SQL_COMMENTS      = '@
@@ -116,6 +117,29 @@ class Zend_Db_Select
      */
     protected $_adapter;
 
+    public function sqlCalcFoundRows($flag = true)
+    {
+        $this->_parts[self::SQL_CALC_FOUND_ROWS] = (bool) $flag;
+        return $this;
+    }
+
+    /**
+     * @description manually added
+     * @link http://osdir.com/ml/php.zend.framework.db/2008-06/msg00017.html
+     * @param type $sql
+     * @return type
+     */
+    protected function _renderSqlCalcFoundRows($sql)
+    {
+        if($this->_parts[self::SQL_CALC_FOUND_ROWS])
+        {
+            // split after first select
+            $sql = preg_replace('/^SELECT (.*?)/', "SELECT SQL_CALC_FOUND_ROWS $1", $sql, 1);
+        }
+
+        return $sql;
+    }
+    
     /**
      * The initial values for the $_parts array.
      * NOTE: It is important for the 'FOR_UPDATE' part to be last to ensure
@@ -1028,7 +1052,19 @@ class Zend_Db_Select
         }
 
         if ($value !== null) {
-            $condition = $this->_adapter->quoteInto($condition, $value, $type);
+            if (is_array($value) && !empty($value)) {
+                // sort array by length
+                uksort($value, array('Sort', 'sortByLength'));
+
+                // replace string with "?" and let zend quote the string
+                foreach ($value as $sKey => $mValue) {
+                    // replace all associative occurences
+                    $sReplacement = $this->_adapter->quoteInto('?', $mValue, $type);
+                    $condition = str_replace(':' . $sKey, $sReplacement, $condition);
+                }
+            } else {
+                $condition = $this->_adapter->quoteInto($condition, $value, $type);
+            }
         }
 
         $cond = "";
